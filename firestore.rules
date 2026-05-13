@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definition
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Phase 4: Drafting the "Fortress" Rules
+    match /feedbacks/{feedbackId} {
+      // Allow creation for anyone (or signed in if preferred, but feedback often public)
+      // For this app, let's allow public submission with strict validation
+      allow create: if isValidFeedback(incoming());
+      
+      // Deny read/update/delete for public
+      // In a real app, maybe admins can read
+      allow read, update, delete: if false;
+    }
+
+    function isValidFeedback(data) {
+      return data.keys().hasAll(['text', 'createdAt']) 
+        && (data.keys().size() >= 2 && data.keys().size() <= 4)
+        && data.text is string && data.text.size() > 0 && data.text.size() <= 2000
+        && data.createdAt == request.time
+        && (!('name' in data) || (data.name is string && data.name.size() <= 100))
+        && (!('email' in data) || (data.email is string && data.email.size() <= 100 && data.email.matches('^[^@]+@[^@]+\\.[^@]+$')));
+    }
+  }
+}
